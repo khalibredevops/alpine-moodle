@@ -37,6 +37,24 @@ update_or_add_config_value() {
     fi
 }
 
+inject_dynamic_wwwroot() {
+    # Remove existing $CFG->wwwroot lines
+    sed -i "/\\\$CFG->wwwroot/d" "$config_file"
+
+    # Inject dynamic $_SERVER['HTTP_HOST'] logic before require_once
+    awk '
+    BEGIN { inserted = 0 }
+    /require_once/ && !inserted {
+        print "if (empty($_SERVER[\"HTTP_HOST\"])) {"
+        print "  $_SERVER[\"HTTP_HOST\"] = \"127.0.0.1:8080\";"
+        print "}"
+        print "$CFG->wwwroot = \"http://\" . $_SERVER[\"HTTP_HOST\"];"
+        inserted = 1
+    }
+    { print }
+    ' "$config_file" > "${config_file}.tmp" && mv "${config_file}.tmp" "$config_file"
+}
+
 # Function to check the availability of a database
 check_db_availability() {
     local db_host="$1"
@@ -110,7 +128,7 @@ set_extra_db_settings() {
 # Function to upgrade config.php
 upgrade_config_file() {
     echo "Upgrading config.php..."
-    update_or_add_config_value "\$CFG->wwwroot" "$SITE_URL"
+    # update_or_add_config_value "\$CFG->wwwroot" "$SITE_URL"
     update_or_add_config_value "\$CFG->dbtype" "$DB_TYPE"
     update_or_add_config_value "\$CFG->dbhost" "$DB_HOST"
     update_or_add_config_value "\$CFG->dbname" "$DB_NAME"
@@ -121,6 +139,8 @@ upgrade_config_file() {
     update_or_add_config_value "\$CFG->reverseproxy" "$REVERSEPROXY"
     update_or_add_config_value "\$CFG->sslproxy" "$SSLPROXY"
     update_or_add_config_value "\$CFG->preventexecpath" "true"
+    # Inject dynamic wwwroot
+    inject_dynamic_wwwroot
 
     # Check if REDIS_HOST is set and not empty
     if [ -n "$REDIS_HOST" ]; then
