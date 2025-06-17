@@ -38,17 +38,25 @@ update_or_add_config_value() {
 }
 
 inject_dynamic_wwwroot() {
-    # Remove existing $CFG->wwwroot lines
+    # Remove existing $CFG->wwwroot and $_SERVER['HTTP_HOST'] logic
     sed -i "/\\\$CFG->wwwroot/d" "$config_file"
+    sed -i "/if (empty(\$_SERVER\[\"HTTP_HOST\"\])) {/,/}/d" "$config_file"
+    sed -i "/\\\$proto =/d" "$config_file"
 
-    # Inject dynamic $_SERVER['HTTP_HOST'] logic before require_once
-    awk '
+    # Inject protocol logic based on ENV SSLPROXY
+    awk -v sslproxy="$SSLPROXY" '
     BEGIN { inserted = 0 }
     /require_once/ && !inserted {
         print "if (empty($_SERVER[\"HTTP_HOST\"])) {"
         print "  $_SERVER[\"HTTP_HOST\"] = \"127.0.0.1:8080\";"
         print "}"
-        print "$CFG->wwwroot = \"http://\" . $_SERVER[\"HTTP_HOST\"];"
+        if (sslproxy == "true" || sslproxy == "1") {
+            print "$proto = \"https\";"
+        } else {
+            print "$proto = \"http\";"
+        }
+        print "$CFG->wwwroot = $proto . \"://\" . $_SERVER[\"HTTP_HOST\"];"
+        print ""
         inserted = 1
     }
     { print }
