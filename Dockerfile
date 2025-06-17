@@ -1,10 +1,10 @@
 ARG ARCH=
-FROM ${ARCH}erseco/alpine-php-webserver:3.20.6
+FROM ${ARCH}erseco/alpine-php-webserver:3.20.7
 
 LABEL maintainer="Ernesto Serrano <info@ernesto.es>"
 
 USER root
-RUN apk add --no-cache composer php83-posix php83-xmlwriter php83-pecl-redis \
+RUN apk add --no-cache composer php83-posix php83-xmlwriter php83-pecl-redis ghostscript poppler \
     # Remove alpine cache
     && rm -rf /var/cache/apk/*
 
@@ -63,9 +63,9 @@ ENV LANG=en_US.UTF-8 \
 #
 # Download and extract Moodle
 RUN if [ "$MOODLE_VERSION" = "main" ]; then \
-      MOODLE_URL="https://github.com/moodle/moodle/archive/main.tar.gz"; \
+    MOODLE_URL="https://github.com/moodle/moodle/archive/main.tar.gz"; \
     else \
-      MOODLE_URL="https://github.com/moodle/moodle/tarball/refs/tags/${MOODLE_VERSION}"; \
+    MOODLE_URL="https://github.com/moodle/moodle/tarball/refs/tags/${MOODLE_VERSION}"; \
     fi && \
     echo "Downloading Moodle from: $MOODLE_URL" && \
     curl -L "$MOODLE_URL" | tar xz --strip-components=1 -C /var/www/html/
