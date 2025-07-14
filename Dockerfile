@@ -1,28 +1,43 @@
-ARG ARCH=
-FROM ${ARCH}erseco/alpine-php-webserver:3.20.7
+FROM php:8.3.23-apache-bookworm
 
-LABEL maintainer="Ernesto Serrano <info@ernesto.es>"
+LABEL maintainer="Khalibre <infra@khalibre.com>"
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+ARG COMPOSER_VERSION=2.8.9
+ARG MOOSH_VERSION=1.27
+ARG MOODLE_VERSION=v4.5.5
+
 
 USER root
-RUN apk add --no-cache composer php83-posix php83-xmlwriter php83-pecl-redis ghostscript poppler \
-    # Remove alpine cache
-    && rm -rf /var/cache/apk/*
 
-# add a quick-and-dirty hack  to fix https://github.com/erseco/alpine-moodle/issues/26
-RUN apk add --no-cache gnu-libiconv=1.15-r3 --repository http://dl-cdn.alpinelinux.org/alpine/v3.13/community/ --allow-untrusted \
-    # Remove alpine cache
-    && rm -rf /var/cache/apk/*
-ENV LD_PRELOAD=/usr/lib/preloadable_libiconv.so
+# Install required packages
+RUN apt-get update && \
+    apt-get install -y \
+        software-properties-common \
+        curl \
+        gnupg2 \
+        libpq5 \
+        ghostscript \
+        poppler-utils \
+        unzip \
+        git \
+        gettext \
+        runit \
+        locales && \
+    locale-gen en_US.UTF-8
+#&& \
+    # apt-get clean && rm -rf /var/lib/apt/lists/*
 
-USER nobody
-
-# Moodle version configuration
-ARG MOODLE_VERSION=main
-
-# Set default environment variables
+# Set locale
 ENV LANG=en_US.UTF-8 \
     LANGUAGE=en_US:en \
-    SITE_URL=http://localhost \
+    LC_ALL=en_US.UTF-8
+
+# USER nobody
+
+# Set default environment variables
+ENV SITE_URL=http://localhost \
     DB_TYPE=pgsql \
     DB_HOST=postgres \
     DB_PORT=5432 \
@@ -54,28 +69,38 @@ ENV LANG=en_US.UTF-8 \
     upload_max_filesize=50M \
     max_input_vars=5000
 
-# To use a specific Moodle version, set MOODLE_VERSION to git release tag.
-# You can find the list of available tags at:
-# https://api.github.com/repos/moodle/moodle/tags
-#
-# Example:
-# MOODLE_VERSION=v4.5.3
-#
+
+USER root
+
 # Download and extract Moodle
-RUN if [ "$MOODLE_VERSION" = "main" ]; then \
-    MOODLE_URL="https://github.com/moodle/moodle/archive/main.tar.gz"; \
+RUN mkdir -p /var/www/html && \
+    if [ "$MOODLE_VERSION" = "main" ]; then \
+        MOODLE_URL="https://github.com/moodle/moodle/archive/main.tar.gz"; \
     else \
-    MOODLE_URL="https://github.com/moodle/moodle/tarball/refs/tags/${MOODLE_VERSION}"; \
+        MOODLE_URL="https://github.com/moodle/moodle/tarball/refs/tags/${MOODLE_VERSION}"; \
     fi && \
     echo "Downloading Moodle from: $MOODLE_URL" && \
     curl -L "$MOODLE_URL" | tar xz --strip-components=1 -C /var/www/html/
 
-USER root
-COPY --chown=nobody rootfs/ /
+# Install Composer
+RUN	echo "Installing composer"; \
+    curl -o composer.phar -fSL "https://github.com/composer/composer/releases/download/${COMPOSER_VERSION}/composer.phar"; \
+    chmod +x ./composer.phar; \
+    mv ./composer.phar /usr/local/bin/composer
 
-USER nobody
+# Install Moosh CLI
+ENV MOOSH_URL=https://github.com/tmuras/moosh/archive/refs/tags/${MOOSH_VERSION}.tar.gz
+RUN mkdir -p /opt/moosh && \
+    curl -L "$MOOSH_URL" | tar xz --strip-components=1 -C /opt/moosh && \
+    composer install --no-interaction --no-cache --working-dir=/opt/moosh
 
-ENV MOOSH_URL=https://github.com/tmuras/moosh/archive/refs/tags/1.27.tar.gz
-RUN curl -L "$MOOSH_URL" | tar xz --strip-components=1 -C /opt/moosh/
+# Copy rootfs and set ownership
+COPY --chown=nobody:nogroup rootfs/ /
 
-RUN composer install --no-interaction --no-cache --working-dir=/opt/moosh
+
+#USER nobody
+
+EXPOSE 80
+RUN chmod +x /docker-entrypoint.sh
+ENTRYPOINT ["/docker-entrypoint.sh"]
+#CMD ["apache2-foreground"]

@@ -1,0 +1,112 @@
+FROM ubuntu:22.04
+
+LABEL maintainer="Ernesto Serrano <info@ernesto.es>"
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Add PHP 8.3 from Sury PPA and install required packages
+RUN apt-get update && \
+    apt-get install -y software-properties-common curl gnupg2 && \
+    add-apt-repository ppa:ondrej/php -y && \
+    apt-get update && \
+    apt-get install -y \
+        runit-run \
+        php8.3 \
+        php8.3-cli \
+        php8.3-fpm \
+        php8.3-common \
+        php8.3-curl \
+        php8.3-mbstring \
+        php8.3-xml \
+        php8.3-posix \
+        php8.3-redis \
+        php8.3-zip \
+        php8.3-pgsql \
+        php8.3-gd \
+        php8.3-intl \
+        php8.3-soap \
+        php8.3-bcmath \
+        php8.3-xmlwriter \
+        ghostscript \
+        poppler-utils \
+        unzip \
+        git \
+        composer \
+        nginx \
+        gettext \
+        locales && \
+    locale-gen en_US.UTF-8 && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Set locale
+ENV LANG=en_US.UTF-8 \
+    LANGUAGE=en_US:en \
+    LC_ALL=en_US.UTF-8
+
+# Set default environment variables
+ENV SITE_URL=http://localhost \
+    DB_TYPE=pgsql \
+    DB_HOST=postgres \
+    DB_PORT=5432 \
+    DB_NAME=moodle \
+    DB_USER=moodle \
+    DB_PASS=moodle \
+    DB_PREFIX=mdl_ \
+    DB_DBHANDLEOPTIONS=false \
+    REDIS_HOST= \
+    REVERSEPROXY=false \
+    SSLPROXY=false \
+    MY_CERTIFICATES=none \
+    MOODLE_EMAIL=user@example.com \
+    MOODLE_LANGUAGE=en \
+    MOODLE_SITENAME=Dockerized_Moodle \
+    MOODLE_USERNAME=moodleuser \
+    MOODLE_PASSWORD=PLEASE_CHANGEME \
+    SMTP_HOST=smtp.gmail.com \
+    SMTP_PORT=587 \
+    SMTP_USER=your_email@gmail.com \
+    SMTP_PASSWORD=your_password \
+    SMTP_PROTOCOL=tls \
+    MOODLE_MAIL_NOREPLY_ADDRESS=noreply@localhost \
+    MOODLE_MAIL_PREFIX=[moodle] \
+    AUTO_UPDATE_MOODLE=true \
+    DEBUG=false \
+    client_max_body_size=50M \
+    post_max_size=50M \
+    upload_max_filesize=50M \
+    max_input_vars=5000
+
+# Moodle version configuration
+ARG MOODLE_VERSION=main
+
+# Download and extract Moodle
+RUN mkdir -p /var/www/html && \
+    if [ "$MOODLE_VERSION" = "main" ]; then \
+        MOODLE_URL="https://github.com/moodle/moodle/archive/main.tar.gz"; \
+    else \
+        MOODLE_URL="https://github.com/moodle/moodle/tarball/refs/tags/${MOODLE_VERSION}"; \
+    fi && \
+    echo "Downloading Moodle from: $MOODLE_URL" && \
+    curl -L "$MOODLE_URL" | tar xz --strip-components=1 -C /var/www/html/
+
+# Create user 'nobody'
+# RUN useradd -m -u 65534 -s /usr/sbin/nologin nobody
+
+# Copy rootfs and set ownership
+COPY --chown=nobody:nogroup rootfs/ /
+
+USER root
+
+# Install Moosh CLI
+ENV MOOSH_URL=https://github.com/tmuras/moosh/archive/refs/tags/1.27.tar.gz
+RUN mkdir -p /opt/moosh && \
+    curl -L "$MOOSH_URL" | tar xz --strip-components=1 -C /opt/moosh && \
+    composer install --no-interaction --no-cache --working-dir=/opt/moosh
+
+# WORKDIR /var/www/html
+
+# EXPOSE 8080
+
+RUN chmod +x /docker-entrypoint.sh
+
+ENTRYPOINT ["/docker-entrypoint.sh"]
